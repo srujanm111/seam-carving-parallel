@@ -1,11 +1,29 @@
-float ***compute_energy_mat_seq(float ***image, int length, int width);
+#ifndef scexec_hpp
+#define scexec_hpp
 
-float ***compute_energy_mat_par(float ***image, int length, int width);
+#include "image.hpp"
+#include "matrix.hpp"
 
-float ***compute_energy_mat_cuda(float ***image, int length, int width);
+Matrix compute_energy_mat_seq(Image& image);
 
-float ***compute_min_cost_mat_seq(float ***energies, int length, int width);
+Matrix compute_energy_mat_par(Image& image);
 
-float ***compute_min_cost_mat_par(float ***energies, int length, int width);
+Matrix compute_energy_mat_cuda(Image& image);
 
-float ***compute_min_cost_mat_cuda(float ***energies, int length, int width);
+// Matrix compute_energy_mat_cuda_tex(Image& image);
+
+Matrix compute_min_cost_mat_seq(Matrix& energies);
+
+Matrix compute_min_cost_mat_par_row(Matrix& energies);
+
+Matrix compute_min_cost_mat_par_tri(Matrix& energies);
+
+Matrix compute_min_cost_mat_cuda(Matrix& energies);
+
+Matrix compute_min_cost_mat_direct_cuda(Image& image);
+
+// Matrix compute_min_cost_mat_direct_cuda_tex(Image& image);
+
+int *find_seam(Matrix& min_cost_mat);
+
+#endif

@@ -1,4 +1,13 @@
-all:
-	/lusr/cuda-11.6/bin/nvcc -O3 -o main.o -c main.cpp -lboost_program_options
-	/lusr/cuda-11.6/bin/nvcc -O3 -o kmeans_kernel.o  -c kmeans_kernel.cu 
-	/lusr/cuda-11.6/bin/nvcc -O3 -o kmeans kmeans.o kmeans_kernel.o -lboost_program_options
+.DEFAULT_GOAL := seamcarver
+
+NVCC=nvcc
+NVCCFLAGS=-g --relocatable-device-code true
+
+ALL_HPP_FILES = main.hpp driver.hpp stb_image.h stb_image_write.h image.hpp scexec.hpp matrix.hpp
+ALL_CPP_FILES = main.cpp driver.cpp image.cpp seam.cpp scseq.cpp scpar.cpp sccuda.cu # sccuda_tex.cu
+
+seamcarver: $(ALL_HPP_FILES) $(ALL_CPP_FILES)
+	$(NVCC) $(NVCCFLAGS) -o seamcarver $(ALL_CPP_FILES) -lboost_program_options -lm
+
+clean:
+	rm -f seamcarver
