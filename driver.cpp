@@ -2,35 +2,48 @@
 #include "scexec.hpp"
 #include "image.hpp"
 #include "matrix.hpp"
-
+#include <chrono>
 #include <iostream>
-#include <string>
 using namespace std;
+
+typedef std::chrono::high_resolution_clock Time;
+typedef std::chrono::milliseconds ms;
+typedef std::chrono::duration<float> fsec;
 
 typedef Matrix (*energy_func_t)(Image&);
 typedef Matrix (*min_cost_func_t)(Matrix&);
 typedef Matrix (*cuda_min_cost_func_t)(Image&);
 
 void print_config(energy_func_t, min_cost_func_t, cuda_min_cost_func_t, bool);
+float time_since(std::chrono::time_point<Time> start);
+void print_timing(timing_t timing);
 
-void rough_pipeline(Image& image, Matrix& energy_mat, min_cost_func_t min_cost_func) {
+void rough_pipeline(timing_t *timing, Image& image, Matrix& energy_mat, min_cost_func_t min_cost_func) {
+    auto start = Time::now();
     Matrix min_cost_mat = min_cost_func(energy_mat);
+    timing->min_cost_time += time_since(start);
     int *seam = find_seam(min_cost_mat);
     energy_mat.remove_seam(seam);
     image.remove_seam(seam);
     delete seam;
 }
 
-void smooth_pipeline(Image& image, energy_func_t energy_func, min_cost_func_t min_cost_func) {
+void smooth_pipeline(timing_t *timing, Image& image, energy_func_t energy_func, min_cost_func_t min_cost_func) {
+    auto start = Time::now();
     Matrix energy_mat = energy_func(image);
+    timing->energy_time += time_since(start);
+    start = Time::now();
     Matrix min_cost_mat = min_cost_func(energy_mat);
+    timing->min_cost_time += time_since(start);
     int *seam = find_seam(min_cost_mat);;
     image.remove_seam(seam);
     delete seam;
 }
 
-void cuda_smooth_pipeline(Image& image, cuda_min_cost_func_t cuda_min_cost_func) {
+void cuda_smooth_pipeline(timing_t *timing, Image& image, cuda_min_cost_func_t cuda_min_cost_func) {
+    auto start = Time::now();
     Matrix min_cost_mat = cuda_min_cost_func(image);
+    timing->min_cost_time += time_since(start);
     int *seam = find_seam(min_cost_mat);
     image.remove_seam(seam);
     delete seam;
@@ -81,45 +94,59 @@ void run_seam_carver(
 
     print_config(energy_func, min_cost_func, cuda_min_cost_func, smooth);
 
-    std::string output_energy = "energy_mat.png";
+    timing_t timing = {0, 0, 0};
+    auto start = Time::now();
 
     if (pipeline_type == 0) {
         // rough
-        Matrix energy_mat = energy_func(image);
-        energy_mat.output_image(&output_energy);
+        Matrix energy_mat = energy_func(image);;
         while (image.width > new_width) {
-            rough_pipeline(image, energy_mat, min_cost_func);
+            rough_pipeline(&timing, image, energy_mat, min_cost_func);
         }
         image.transpose();
         energy_mat.transpose();
         while (image.width > new_height) {
-            rough_pipeline(image, energy_mat, min_cost_func);
+            rough_pipeline(&timing, image, energy_mat, min_cost_func);
         }
         image.transpose();
     } else if (pipeline_type == 1) {
         // smooth
         while (image.width > new_width) {
-            smooth_pipeline(image, energy_func, min_cost_func);
+            smooth_pipeline(&timing, image, energy_func, min_cost_func);
         }
         image.transpose();
         while (image.width > new_height) {
-            smooth_pipeline(image, energy_func, min_cost_func);
+            smooth_pipeline(&timing, image, energy_func, min_cost_func);
         }
         image.transpose();
     } else {
         // cuda smooth
         while (image.width > new_width) {
-            cuda_smooth_pipeline(image, cuda_min_cost_func);
+            cuda_smooth_pipeline(&timing, image, cuda_min_cost_func);
         }
         image.transpose();
         while (image.width > new_height) {
-            cuda_smooth_pipeline(image, cuda_min_cost_func);
+            cuda_smooth_pipeline(&timing, image, cuda_min_cost_func);
         }
         image.transpose();
     }
+
+    timing.total_time = time_since(start);
+    print_timing(timing);
 }
 
 void print_config(energy_func_t energy_func, min_cost_func_t min_cost_func, cuda_min_cost_func_t cuda_min_cost_func, bool smooth) {
+    cout << "------------------CONFIG------------------" << endl;
+
+    if (cuda_min_cost_func == compute_min_cost_mat_direct_cuda) {
+        cout << "cuda_end_to_end_func: compute_min_cost_mat_direct_cuda" << endl;
+        return;
+    }
+    // else if (cuda_min_cost_func == compute_min_cost_mat_direct_cuda_tex) {
+    //     cout << "cuda_end_to_end_func: compute_min_cost_mat_direct_cuda_tex" << endl;
+    //     return;
+    // }
+
     cout << "energy_func: ";
     if (energy_func == compute_energy_mat_seq) {
         cout << "compute_energy_mat_seq" << endl;
@@ -142,14 +169,18 @@ void print_config(energy_func_t energy_func, min_cost_func_t min_cost_func, cuda
     } else if (min_cost_func == compute_min_cost_mat_cuda) {
         cout << "compute_min_cost_mat_cuda" << endl;
     }
-    
-    cout << "cuda_min_cost_func: ";
-    if (cuda_min_cost_func == compute_min_cost_mat_direct_cuda) {
-        cout << "compute_min_cost_mat_direct_cuda" << endl;
-    }
-    // else if (cuda_min_cost_func == compute_min_cost_mat_direct_cuda_tex) {
-    //     cout << "compute_min_cost_mat_direct_cuda_tex" << endl;
-    // }
 
-    cout << "smooth: " << smooth << endl;
+    cout << "smooth: " << (smooth ? "yes" : "no") << endl;
+
+    cout << "------------------------------------------" << endl;
+}
+
+float time_since(std::chrono::time_point<Time> start) {
+    auto end = Time::now();
+    fsec fs = end - start;
+    return fs.count();
+}
+
+void print_timing(timing_t timing) {
+    cerr << timing.energy_time << ", " << timing.min_cost_time << ", " << timing.total_time << endl;
 }
