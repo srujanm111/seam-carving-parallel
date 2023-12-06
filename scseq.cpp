@@ -1,6 +1,7 @@
 #include <cmath>
 #include "image.hpp"
 #include "matrix.hpp"
+#include "timing.hpp"
 
 float dual_gradient_energy_seq(Image& image, int x, int y) {
     int x_up = x == 0 ? image.height - 1 : x - 1;
@@ -23,17 +24,20 @@ float dual_gradient_energy_seq(Image& image, int x, int y) {
     return x_gradient + y_gradient + 1.0;
 }
 
-Matrix compute_energy_mat_seq(Image& image) {
+Matrix compute_energy_mat_seq(timing_t& timing, Image& image) {
+    auto start = TIME_NOW;
     Matrix energy_mat(image.height, image.width);
     for (int i = 0; i < image.height; i++) {
         for (int j = 0; j < image.width; j++) {
             energy_mat.set(i, j, dual_gradient_energy_seq(image, i, j));
         }
     }
+    timing.energy_time += TIME_SINCE(start);
     return energy_mat;
 }
 
-Matrix compute_min_cost_mat_seq(Matrix& energies) {
+Matrix compute_min_cost_mat_seq(timing_t& timing, Matrix& energies) {
+    auto start = TIME_NOW;
     int height = energies.height;
     int width = energies.width;
     Matrix min_cost_mat(height, width);
@@ -56,6 +60,6 @@ Matrix compute_min_cost_mat_seq(Matrix& energies) {
             }
         }
     }
-
+    timing.min_cost_time += TIME_SINCE(start);
     return min_cost_mat;
 }

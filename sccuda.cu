@@ -1,6 +1,7 @@
 #include "scexec.hpp"
 #include "image.hpp"
 #include "matrix.hpp"
+#include "timing.hpp"
 
 #include <iostream>
 #include <assert.h>
@@ -119,11 +120,19 @@ __global__ void min_cost(float* energies, int width, int row, float* min_energie
 * @param image the image
 * @return a 2d float matrix (height, width) representing the min energy of each pixel
 */
-__host__ void compute_min_cost_mat_direct_cuda(Image& image, int new_width) {
+__host__ void compute_min_cost_mat_direct_cuda(timing_t& timing, Image& image, int new_width) {
   find_cuda_device();
 
   int height = image.height;
   int width = image.width;
+
+  // timer events
+  cudaEvent_t start_e, stop_e;
+  cudaEventCreate(&start_e);
+  cudaEventCreate(&stop_e);
+  cudaEvent_t start_m, stop_m;
+  cudaEventCreate(&start_m);
+  cudaEventCreate(&stop_m);
 
   //Send image to GPU
   const int num_points = height * width;
@@ -156,13 +165,25 @@ __host__ void compute_min_cost_mat_direct_cuda(Image& image, int new_width) {
                     (temp_width + threads_per_block.y - 1) / threads_per_block.y);
 
     //launch kernel
+    cudaEventRecord(start_e);
     dual_gradient<<<num_blocks, threads_per_block>>>(image_flat, height, temp_width, energies);
+    cudaEventRecord(stop_e);
+    cudaEventSynchronize(stop_e);
+    float e_milliseconds = 0;
+    cudaEventElapsedTime(&e_milliseconds, start_e, stop_e);
+    timing.energy_time += e_milliseconds / 1000;
 
     //TODO new decomposition  
+    cudaEventRecord(start_m);
     int energy_blocks = (temp_width + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
     for(int y = 0; y < height; ++y) {  
       min_cost<<<energy_blocks, THREADS_PER_BLOCK>>>(energies, temp_width, y, min_energies);
     }
+    cudaEventRecord(stop_m);
+    cudaEventSynchronize(stop_m);
+    float m_milliseconds = 0;
+    cudaEventElapsedTime(&m_milliseconds, start_m, stop_m);
+    timing.min_cost_time += m_milliseconds / 1000;
 
     float** out_energies = (float**) malloc(height * sizeof(float*));
     int row_size = temp_width * sizeof(float);
@@ -191,12 +212,16 @@ __host__ void compute_min_cost_mat_direct_cuda(Image& image, int new_width) {
 // non-direct stuff
 //
 
-__host__ Matrix compute_energy_mat_cuda(Image& image) {
+__host__ Matrix compute_energy_mat_cuda(timing_t& timing, Image& image) {
   find_cuda_device();
 
   int height = image.height;
   int width = image.width;
   float** image_data = image.image;
+
+  cudaEvent_t start_e, stop_e;
+  cudaEventCreate(&start_e);
+  cudaEventCreate(&stop_e);
 
   //Send image to GPU
   const int num_points = height * width;
@@ -221,7 +246,13 @@ __host__ Matrix compute_energy_mat_cuda(Image& image) {
                   (height + threads_per_block.y - 1) / threads_per_block.y);
 
   //launch kernel
+  cudaEventRecord(start_e);
   dual_gradient<<<num_blocks, threads_per_block>>>(image_flat, height, width, energies);
+  cudaEventRecord(stop_e);
+  cudaEventSynchronize(stop_e);
+  float milliseconds = 0;
+  cudaEventElapsedTime(&milliseconds, start_e, stop_e);
+  timing.energy_time += milliseconds / 1000;
 
   float** out_energies = (float**) malloc(height * sizeof(float*));
   const int row_size = width * sizeof(float);
@@ -238,12 +269,16 @@ __host__ Matrix compute_energy_mat_cuda(Image& image) {
   return Matrix(out_energies, height, width);
 }
 
-__host__ Matrix compute_min_cost_mat_cuda(Matrix& energies_mat) {
+__host__ Matrix compute_min_cost_mat_cuda(timing_t& timing, Matrix& energies_mat) {
   find_cuda_device();
 
   int height = energies_mat.height;
   int width = energies_mat.width;
   float** matrix = energies_mat.matrix;
+
+  cudaEvent_t start_m, stop_m;
+  cudaEventCreate(&start_m);
+  cudaEventCreate(&stop_m);
 
   const int num_points = height * width;
 
@@ -263,10 +298,16 @@ __host__ Matrix compute_min_cost_mat_cuda(Matrix& energies_mat) {
   cudaMalloc(&min_energies, num_points * sizeof(float));
 
   //TODO new decomposition  
+  cudaEventRecord(start_m);
   int energy_blocks = (width + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
   for(int y = 0; y < height; ++y) {  
     min_cost<<<energy_blocks, THREADS_PER_BLOCK>>>(energies, width, y, min_energies);
   }
+  cudaEventRecord(stop_m);
+  cudaEventSynchronize(stop_m);
+  float milliseconds = 0;
+  cudaEventElapsedTime(&milliseconds, start_m, stop_m);
+  timing.min_cost_time += milliseconds / 1000;
 
   float** out_energies = (float**) malloc(height * sizeof(float*));
   for(int y = 0; y < height; y++) {
