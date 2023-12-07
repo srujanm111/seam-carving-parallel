@@ -2,6 +2,7 @@
 #define matrix_hpp
 
 #include <string>
+#include <iostream>
 #include "image.hpp"
 
 class Matrix {

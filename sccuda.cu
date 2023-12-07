@@ -149,10 +149,10 @@ __host__ void compute_min_cost_mat_direct_cuda(timing_t& timing, Image& image, i
   gpuErrchk(cudaMalloc(&min_energies, num_points * sizeof(float)));
 
   int temp_width = width;
-  int pixel_row_size = temp_width * NUM_COLORS * sizeof(float);
   while(temp_width > new_width) {
     float** image_data = image.image;
 
+    int pixel_row_size = temp_width * NUM_COLORS * sizeof(float);
     for(int r = 0; r < height; ++r) {
       int img_idx = r * temp_width * NUM_COLORS;
       cudaMemcpy(image_flat + img_idx, image_data[r], pixel_row_size, cudaMemcpyHostToDevice);
@@ -284,18 +284,18 @@ __host__ Matrix compute_min_cost_mat_cuda(timing_t& timing, Matrix& energies_mat
 
   //Allocate energies
   float* energies;
-  cudaMalloc(&energies, num_points * sizeof(float));
-  cudaMemset(energies, 0, num_points * sizeof(float));
+  gpuErrchk(cudaMalloc(&energies, num_points * sizeof(float)));
+  gpuErrchk(cudaMemset(energies, 0, num_points * sizeof(float)));
 
   const int row_size = width * sizeof(float);
   for(int y = 0; y < height; ++y) {
     int offset = y * width;
-    cudaMemcpy(energies + offset, matrix[y], row_size, cudaMemcpyHostToDevice);
+    gpuErrchk(cudaMemcpy(energies + offset, matrix[y], row_size, cudaMemcpyHostToDevice));
   }
 
   //Allocate energies
   float* min_energies;
-  cudaMalloc(&min_energies, num_points * sizeof(float));
+  gpuErrchk(cudaMalloc(&min_energies, num_points * sizeof(float)));
 
   //TODO new decomposition  
   cudaEventRecord(start_m);
@@ -313,11 +313,11 @@ __host__ Matrix compute_min_cost_mat_cuda(timing_t& timing, Matrix& energies_mat
   for(int y = 0; y < height; y++) {
     out_energies[y] = (float*) malloc(width * sizeof(float));
     int offset = y * width;
-    cudaMemcpy(out_energies[y], min_energies + offset, row_size, cudaMemcpyDeviceToHost);
+    gpuErrchk(cudaMemcpy(out_energies[y], min_energies + offset, row_size, cudaMemcpyDeviceToHost));
   }
 
-  cudaFree(energies);
-  cudaFree(min_energies);
+  gpuErrchk(cudaFree(energies));
+  gpuErrchk(cudaFree(min_energies));
 
   //Should be no need for barriers thanks to final cuda memcpy
   return Matrix(out_energies, height, width);
