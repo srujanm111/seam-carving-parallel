@@ -1,1 +1,1 @@
-View Benchmarking/Report: https://www.cs.utexas.edu/~srujanm/Seam_Carving.pdf
+View Benchmarking/Report: https://srujanm111.github.io/srujanm111/
